@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OHI — Scatter Plot</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      background: #ffffff;
+      color: #1a1a2e;
+      font-family: 'DM Mono', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 16px;
+    }
+
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.1rem;
+      color: #1a6fa8;
+      margin-bottom: 2px;
+      text-align: center;
+    }
+
+    p.subtitle {
+      font-size: 0.65rem;
+      color: #2a6080;
+      margin-bottom: 8px;
+      text-align: center;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    #chart { width: 100%; }
+
+    .axis text { fill: #4a7fa5; font-family: 'DM Mono', monospace; font-size: 10px; }
+    .axis path, .axis line { stroke: #d0dde8; }
+    .grid line { stroke: #eef2f6; stroke-dasharray: 3,3; }
+    .grid path { stroke: none; }
+
+    .dot {
+      fill: #1a6fa8;
+      opacity: 0.5;
+      transition: opacity 0.3s, r 0.3s;
+      cursor: pointer;
+    }
+
+    .dot.faded { opacity: 0.08; }
+    .dot.highlighted { opacity: 1; stroke: #c0392b; stroke-width: 2; }
+
+    .axis-label {
+      fill: #2a6080;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+    }
+
+    .tooltip {
+      position: fixed;
+      background: rgba(255,255,255,0.97);
+      border: 1px solid #a0c4d8;
+      color: #1a1a2e;
+      padding: 7px 11px;
+      border-radius: 6px;
+      font-size: 11px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 10;
+    }
+
+    .tooltip strong { color: #1a6fa8; display: block; margin-bottom: 2px; }
+  </style>
+</head>
+<body>
+  <h1>OHI Promedio vs Cambio Acumulado</h1>
+  <p class="subtitle">Cada punto = un país · 2012 → 2024</p>
+  <div id="chart"></div>
+  <div class="tooltip" id="tooltip"></div>
+
+  <script>
+    const histYears = [2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025,2026,2027,2028,2029,2030];
+    const margin = { top: 10, right: 20, bottom: 46, left: 54 };
+    const tooltip = document.getElementById('tooltip');
+
+    d3.csv('OHI_full.csv').then(csv => {
+
+      const data = csv.map(row => {
+        const vals = histYears.map(y => parseFloat(row[y])).filter(v => !isNaN(v));
+        if (vals.length < 2) return null;
+        const v2012 = parseFloat(row['2012']);
+        const v2030 = parseFloat(row['2030']);
+        if (isNaN(v2012) || isNaN(v2030)) return null;
+        return {
+          name: row.REF_AREA_LABEL,
+          avg: d3.mean(vals),
+          change: Math.abs(v2030 - v2012)
+        };
+      }).filter(d => d !== null);
+
+      const W0 = document.getElementById('chart').clientWidth || 400;
+      const usedH = document.querySelector('h1').offsetHeight
+                  + document.querySelector('p.subtitle').offsetHeight
+                  + 24;
+      const H0 = Math.max(120, window.innerHeight - usedH);
+      const W  = W0 - margin.left - margin.right;
+      const H  = H0 - margin.top  - margin.bottom;
+
+      const x = d3.scaleLinear()
+        .domain([d3.min(data, d => d.avg) - 1, d3.max(data, d => d.avg) + 1])
+        .range([0, W]);
+
+      const y = d3.scaleLinear()
+        .domain([0, d3.max(data, d => d.change) + 1])
+        .range([H, 0]);
+
+      const svg = d3.select('#chart').append('svg')
+        .attr('width', W0).attr('height', H0)
+        .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+      // Grid
+      svg.append('g').attr('class', 'grid')
+        .call(d3.axisLeft(y).tickSize(-W).tickFormat(''));
+      svg.append('g').attr('class', 'grid')
+        .attr('transform', `translate(0,${H})`)
+        .call(d3.axisBottom(x).tickSize(-H).tickFormat(''));
+
+      // Ejes
+      svg.append('g').attr('class', 'axis')
+        .attr('transform', `translate(0,${H})`)
+        .call(d3.axisBottom(x).ticks(6));
+      svg.append('g').attr('class', 'axis')
+        .call(d3.axisLeft(y).ticks(6));
+
+      // Etiquetas ejes
+      svg.append('text').attr('class', 'axis-label')
+        .attr('x', W / 2).attr('y', H + 38)
+        .attr('text-anchor', 'middle')
+        .text('OHI Promedio (2012–2024)');
+
+      svg.append('text').attr('class', 'axis-label')
+        .attr('transform', 'rotate(-90)')
+        .attr('x', -H / 2).attr('y', -42)
+        .attr('text-anchor', 'middle')
+        .text('Cambio acumulado |2030 - 2012|');
+
+      const colorScale = d3.scaleOrdinal(d3.schemeTableau10.concat(d3.schemePastel1).concat(d3.schemeSet3));
+
+      // Puntos
+      const dots = svg.selectAll('.dot')
+        .data(data)
+        .enter().append('circle')
+        .attr('class', 'dot')
+        .attr('data-name', d => d.name)
+        .attr('cx', d => x(d.avg))
+        .attr('cy', d => y(d.change))
+        .attr('r', 5)
+        .style('fill', d => colorScale(d.name))
+        .on('mousemove', (event, d) => {
+          tooltip.style.opacity = 1;
+          tooltip.style.left = (event.clientX + 14) + 'px';
+          tooltip.style.top  = (event.clientY - 30) + 'px';
+          tooltip.innerHTML  = `<strong>${d.name}</strong>
+            OHI promedio: ${d.avg.toFixed(2)}<br>
+            Cambio acumulado: ${d.change.toFixed(2)}`;
+        })
+        .on('mouseleave', () => { tooltip.style.opacity = 0; });
+
+      // Escuchar click desde el mapa
+      window.addEventListener('message', e => {
+        if (e.data?.type !== 'countryClick') return;
+        const name = e.data.country;
+        dots.classed('faded', true).classed('highlighted', false).attr('r', 5);
+        dots.filter(d => d.name === name)
+          .classed('faded', false)
+          .classed('highlighted', true)
+          .attr('r', 9);
+      });
+    });
+  </script>
+</body>
+</html>

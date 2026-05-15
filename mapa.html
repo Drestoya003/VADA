@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ocean Health Index — Change Map</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #ffffff;
+      color: #1a1a2e;
+      font-family: 'DM Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 2.2rem;
+      color: #1a6fa8;
+      margin-top: 60px;
+      margin-bottom: 6px;
+      text-align: center;
+    }
+
+    p.subtitle {
+      font-size: 0.8rem;
+      color: #2a6080;
+      margin-bottom: 24px;
+      text-align: center;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    #map { width: 100%; max-width: 1400px; }
+
+    .country {
+      stroke: #ffffff;
+      stroke-width: 0.4;
+      transition: fill 0.6s ease;
+    }
+
+    .country:hover { opacity: 0.75; cursor: pointer; }
+
+    .sphere    { fill: #f0eff1; }
+    .graticule { fill: none; stroke: #cccccc; stroke-width: 0.4; }
+
+    .tooltip {
+      position: fixed;
+      background: rgba(255, 255, 255, 0.97);
+      border: 1px solid #a0c4d8;
+      color: #1a1a2e;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 10;
+    }
+
+    .tooltip strong {
+      color: #1a6fa8;
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    #controls {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 18px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    #year-label {
+      font-size: 1.4rem;
+      font-family: 'Playfair Display', serif;
+      color: #1a6fa8;
+      min-width: 52px;
+      text-align: center;
+    }
+
+    #slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 320px;
+      height: 6px;
+      border-radius: 3px;
+      background: #d0dde8;
+      outline: none;
+      cursor: pointer;
+    }
+
+    #slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #1a6fa8;
+      cursor: pointer;
+    }
+
+    #play-btn {
+      background: #1a6fa8;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 18px;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    #play-btn:hover { background: #155d8e; }
+
+    #reset-btn {
+      background: #e0e0e0;
+      color: #1a1a2e;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 18px;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    #reset-btn:hover { background: #c8c8c8; }
+
+    #legend {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 16px;
+      font-size: 11px;
+      color: #2a6080;
+    }
+
+    #legend-bar {
+      width: 260px;
+      height: 12px;
+      border-radius: 4px;
+      background: linear-gradient(to right, #aaaaaa, #1a6fa8, #f39c12, #c0392b);
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Ocean Health Index</h1>
+  <p class="subtitle">Cambio acumulado respecto a 2012</p>
+  <div id="map"></div>
+
+  <div id="controls">
+    <button id="play-btn">▶ Play</button>
+    <button id="reset-btn">↺ Reiniciar</button>
+    <input type="range" id="slider" min="0" max="18" value="0" step="1"/>
+    <span id="year-label">2012</span>
+  </div>
+
+  <div id="legend">
+    <span>Sin cambio</span>
+    <div id="legend-bar"></div>
+    <span>Mucho cambio</span>
+  </div>
+
+  <div class="tooltip" id="tooltip"></div>
+
+  <script>
+    const years = [2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025,2026,2027,2028,2029,2030];
+    const width  = document.getElementById('map').clientWidth || 1400;
+    const height = Math.round(width * 0.52);
+
+    const svg = d3.select('#map')
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height);
+
+    const projection = d3.geoNaturalEarth1()
+      .scale(width / 6.1)
+      .translate([width / 2, height / 2]);
+
+    const path = d3.geoPath().projection(projection);
+
+    svg.append('path')
+      .datum({ type: 'Sphere' })
+      .attr('class', 'sphere')
+      .attr('d', path);
+
+    svg.append('path')
+      .datum(d3.geoGraticule()())
+      .attr('class', 'graticule')
+      .attr('d', path);
+
+    const tooltip  = document.getElementById('tooltip');
+    const slider   = document.getElementById('slider');
+    const yearLabel = document.getElementById('year-label');
+    const playBtn  = document.getElementById('play-btn');
+
+    // Paleta: gris (sin cambio) → azul → naranja → rojo (mucho cambio)
+    const colorScale = d3.scaleSequential()
+      .interpolator(d3.interpolateRgbBasis(['#aaaaaa', '#1a6fa8', '#f39c12', '#c0392b']));
+
+    const normalize = s => s.toLowerCase()
+      .replace(/[^a-z0-9 ]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const aliases = {
+      'United States of America': 'United States',
+      'Russia': 'Russian Federation',
+      'South Korea': 'Korea, Rep.',
+      'North Korea': "Korea, Dem. People's Rep.",
+      'Syria': 'Syrian Arab Republic',
+      'Iran': 'Iran, Islamic Rep.',
+      'Vietnam': 'Viet Nam',
+      'Laos': 'Lao PDR',
+      'Tanzania': 'Tanzania',
+      'Democratic Republic of the Congo': 'Congo, Dem. Rep.',
+      'Republic of the Congo': 'Congo, Rep.',
+      'Ivory Coast': "Cote d'Ivoire",
+      'Turkey': 'Turkiye',
+      'Cape Verde': 'Cabo Verde',
+      'East Timor': 'Timor-Leste',
+      'Swaziland': 'Eswatini',
+      'Macedonia': 'North Macedonia',
+      'Reunion': 'Reunion',
+      'Bahamas': 'Bahamas, The',
+      'Venezuela': 'Venezuela',
+      'Egypt': 'Egypt, Arab Rep.',
+      'Yemen': 'Yemen, Rep.',
+      'Micronesia': 'Micronesia, Fed. Sts.',
+      'Taiwan': 'Taiwan, China',
+      'Palestine': 'West Bank and Gaza',
+    };
+
+    Promise.all([
+      d3.json('https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson'),
+      fetch('OHI_full.csv').then(r => r.text()).then(raw => {
+        const lines = raw.replace(/\r/g, '').split('\n');
+        const merged = [];
+        for (const line of lines) {
+          const t = line.trim();
+          if (!t) continue;
+          if (/^[A-Z]{2,3},/.test(t) || t.startsWith('REF_AREA')) merged.push(t);
+          else if (merged.length) merged[merged.length - 1] += ' ' + t;
+        }
+        return d3.csvParse(merged.join('\n'));
+      })
+    ]).then(([world, csv]) => {
+
+      const scoreMap = {};
+      csv.forEach(d => {
+        const label = (d.REF_AREA_LABEL || '').replace(/\s+/g, ' ').trim();
+        if (!label) return;
+        const base = parseFloat(d['2012']);
+        if (isNaN(base)) return;
+        scoreMap[label] = { base };
+        years.forEach(y => {
+          const v = parseFloat(d[String(y)]);
+          scoreMap[label][y] = isNaN(v) ? null : v;
+        });
+      });
+
+      // Calcular el máximo cambio acumulado global para normalizar la escala
+      let globalMax = 0;
+      Object.values(scoreMap).forEach(s => {
+        years.forEach(y => {
+          if (s[y] !== null) {
+            const diff = Math.abs(s[y] - s.base);
+            if (diff > globalMax) globalMax = diff;
+          }
+        });
+      });
+
+      const csvNames      = Object.keys(scoreMap);
+      const csvNormalized = csvNames.map(normalize);
+
+      function findCountry(geoName) {
+        const aliased = aliases[geoName];
+        if (aliased && scoreMap[aliased]) return aliased;
+        if (scoreMap[geoName]) return geoName;
+        const n = normalize(geoName);
+        let idx = csvNormalized.indexOf(n);
+        if (idx !== -1) return csvNames[idx];
+        idx = csvNormalized.findIndex(c => c.includes(n) || n.includes(c));
+        return idx !== -1 ? csvNames[idx] : null;
+      }
+
+      function getColor(geoName, year) {
+        const match = findCountry(geoName);
+        if (!match) return '#cccccc';
+        const s = scoreMap[match];
+        if (year === 2012 || s[year] === null) return '#aaaaaa';
+        const change = Math.abs(s[year] - s.base);
+        colorScale.domain([0, globalMax]);
+        return colorScale(change);
+      }
+
+      // Dibujar países
+      const countries = svg.selectAll('.country')
+        .data(world.features)
+        .enter()
+        .append('path')
+        .attr('class', 'country')
+        .attr('d', path)
+        .attr('fill', d => getColor(d.properties.name, 2012))
+        .on('mousemove', function(event, d) {
+          const match = findCountry(d.properties.name);
+          const year  = years[+slider.value];
+          tooltip.style.opacity = 1;
+          tooltip.style.left = (event.clientX + 14) + 'px';
+          tooltip.style.top  = (event.clientY - 30) + 'px';
+          if (match && scoreMap[match][year] !== null) {
+            const base = scoreMap[match].base;
+            const cur  = scoreMap[match][year];
+            tooltip.innerHTML = `<strong>${d.properties.name}</strong>
+              2012: ${base.toFixed(1)} → ${year}: ${cur.toFixed(1)}<br>
+              Cambio acumulado: ${Math.abs(cur - base).toFixed(1)}`;
+          } else {
+            tooltip.innerHTML = `<strong>${d.properties.name}</strong>Sin datos`;
+          }
+        })
+        .on('mouseleave', () => { tooltip.style.opacity = 0; })
+        .on('click', function(event, d) {
+          const match = findCountry(d.properties.name);
+          if (match) window.parent.postMessage({ type: 'countryClick', country: match }, '*');
+        });
+
+      // Actualizar mapa al año seleccionado
+      function updateYear(idx) {
+        const year = years[idx];
+        yearLabel.textContent = year;
+        countries.transition().duration(500)
+          .attr('fill', d => getColor(d.properties.name, year));
+      }
+
+      slider.addEventListener('input', () => updateYear(+slider.value));
+
+      document.getElementById('reset-btn').addEventListener('click', () => {
+        if (timer) { clearInterval(timer); timer = null; playBtn.textContent = '▶ Play'; }
+        slider.value = 0;
+        updateYear(0);
+      });
+
+      // Animación play
+      let timer = null;
+      playBtn.addEventListener('click', () => {
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+          playBtn.textContent = '▶ Play';
+          return;
+        }
+        playBtn.textContent = '⏸ Pausa';
+        if (+slider.value === years.length - 1) slider.value = 0;
+        timer = setInterval(() => {
+          const next = +slider.value + 1;
+          slider.value = next;
+          updateYear(next);
+          if (next === years.length - 1) {
+            clearInterval(timer);
+            timer = null;
+            playBtn.textContent = '▶ Play';
+          }
+        }, 900);
+      });
+    });
+  </script>
+</body>
+</html>
