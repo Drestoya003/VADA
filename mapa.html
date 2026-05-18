@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ocean Health Index — Change Map</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #ffffff;
+      color: #1a1a2e;
+      font-family: 'DM Mono', monospace;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      overflow: hidden;
+      position: relative;
+    }
+
+    #map { width: 100%; max-width: 1400px; padding-left: 20px; }
+
+    .country {
+      stroke: #ffffff;
+      stroke-width: 0.4;
+      transition: fill 0.6s ease;
+    }
+
+    .country:hover { opacity: 0.75; cursor: pointer; }
+
+    .sphere    { fill: #f0eff1; }
+    .graticule { fill: none; stroke: #cccccc; stroke-width: 0.4; }
+
+    .tooltip {
+      position: fixed;
+      background: rgba(255, 255, 255, 0.97);
+      border: 1px solid #a0c4d8;
+      color: #1a1a2e;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 10;
+    }
+
+    .tooltip strong {
+      color: #1a6fa8;
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    #year-select {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.8rem;
+      color: #1a1a2e;
+      border: 1px solid #d0dde8;
+      border-radius: 6px;
+      padding: 4px 10px;
+      background: #ffffff;
+      cursor: pointer;
+      outline: none;
+      z-index: 5;
+      width: 160px;
+    }
+
+    #year-select:focus { border-color: #1a6fa8; }
+
+    #search-box {
+      position: absolute;
+      top: 44px;
+      left: 10px;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.8rem;
+      color: #1a1a2e;
+      border: 1px solid #d0dde8;
+      border-radius: 6px;
+      padding: 4px 10px;
+      background: #ffffff;
+      z-index: 5;
+      width: 110px;
+      outline: none;
+    }
+
+    #search-box:focus { border-color: #1a6fa8; }
+
+    .country.selected {
+      stroke: #0d47a1;
+      stroke-width: 3;
+    }
+
+    #legend {
+      position: absolute;
+      bottom: 20px;
+      left: 10px;
+      background: rgba(255,255,255,0.95);
+      border: 1px solid #d0dde8;
+      border-radius: 8px;
+      padding: 10px 14px;
+      z-index: 5;
+      font-size: 11px;
+      color: #1a1a2e;
+    }
+
+    #legend-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 8px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+
+    .legend-item:last-child { margin-bottom: 0; }
+
+    .legend-swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+  </style>
+</head>
+<body>
+
+  <select id="year-select">
+    <option value="2012">2012</option>
+    <option value="2013">2013</option>
+    <option value="2014">2014</option>
+    <option value="2015">2015</option>
+    <option value="2016">2016</option>
+    <option value="2017">2017</option>
+    <option value="2018">2018</option>
+    <option value="2019">2019</option>
+    <option value="2020">2020</option>
+    <option value="2021">2021</option>
+    <option value="2022">2022</option>
+    <option value="2023">2023</option>
+    <option value="2024" selected>2024</option>
+    <option value="2025">2025</option>
+    <option value="2026">2026</option>
+    <option value="2027">2027</option>
+    <option value="2028">2028</option>
+    <option value="2029">2029</option>
+    <option value="2030">2030</option>
+  </select>
+
+  <input type="text" id="search-box" placeholder="Buscar país"/>
+  <div id="map"></div>
+
+  <div id="legend">
+    <div id="legend-title">OHI Score</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#e67e22"></div><span>≤ 50 — Crítico</span></div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#d4a017"></div><span>50 – 70 — Moderado</span></div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#5dade2"></div><span>70 – 80 — Bueno</span></div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#1a6fa8"></div><span>≥ 80 — Excelente</span></div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#cccccc"></div><span>Sin datos</span></div>
+  </div>
+
+  <div class="tooltip" id="tooltip"></div>
+
+  <script>
+    const years = [2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025,2026,2027,2028,2029,2030];
+    const width  = document.getElementById('map').clientWidth || 1400;
+    const height = Math.round(width * 0.52);
+
+    const svg = d3.select('#map')
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height);
+
+    const projection = d3.geoNaturalEarth1()
+      .scale(width / 6.1)
+      .translate([width / 2, height / 2]);
+
+    const path = d3.geoPath().projection(projection);
+
+    svg.append('path')
+      .datum({ type: 'Sphere' })
+      .attr('class', 'sphere')
+      .attr('d', path);
+
+    svg.append('path')
+      .datum(d3.geoGraticule()())
+      .attr('class', 'graticule')
+      .attr('d', path);
+
+    const tooltip    = document.getElementById('tooltip');
+    const yearSelect  = document.getElementById('year-select');
+    const searchBox   = document.getElementById('search-box');
+    let   selectedYear = 2024;
+
+    const colorScale = d3.scaleThreshold()
+      .domain([50, 70, 80])
+      .range(['#e67e22', '#d4a017', '#5dade2', '#1a6fa8']);
+
+    const normalize = s => s.toLowerCase()
+      .replace(/[^a-z0-9 ]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const aliases = {
+      'United States of America': 'United States',
+      'USA':                      'United States',
+      'Russia':                   'Russian Federation',
+      'South Korea':              'Korea Rep.',
+      'North Korea':              "Korea Dem. People's Rep.",
+      'Syria':                    'Syrian Arab Republic',
+      'Iran':                     'Iran Islamic Rep.',
+      'Vietnam':                  'Viet Nam',
+      'Laos':                     'Lao PDR',
+      'Tanzania':                 'Tanzania',
+      'Democratic Republic of the Congo': 'Congo Dem. Rep.',
+      'Republic of the Congo':    'Congo Rep.',
+      'Ivory Coast':              "Cote d'Ivoire",
+      'Turkey':                   'Turkiye',
+      'Cape Verde':               'Cabo Verde',
+      'East Timor':               'Timor-Leste',
+      'Swaziland':                'Eswatini',
+      'Macedonia':                'North Macedonia',
+      'Reunion':                  'Reunion',
+      'Bahamas':                  'Bahamas The',
+      'Gambia':                   'Gambia The',
+      'Egypt':                    'Egypt Arab Rep.',
+      'Yemen':                    'Yemen Rep.',
+      'Micronesia':               'Micronesia Fed. Sts.',
+      'Taiwan':                   'Taiwan China',
+      'Palestine':                'West Bank and Gaza',
+      'Burma':                    'Myanmar',
+      'United Arab Emirates':     'UnitedArab Emirates',
+      'Brunei':                   'Brunei Darussalam',
+      'Trinidad and Tobago':      'Trinidad and Tobago',
+      'Solomon Islands':          'Solomon Islands',
+      'Papua New Guinea':         'Papua New Guinea',
+      'Fiji':                     'Fiji',
+      'Vanuatu':                  'Vanuatu',
+      'Samoa':                    'Samoa',
+      'Tonga':                    'Tonga',
+      'Mauritius':                'Mauritius',
+      'Comoros':                  'Comoros',
+      'Maldives':                 'Maldives',
+      'Malta':                    'Malta',
+      'Singapore':                'Singapore',
+      'Jamaica':                  'Jamaica',
+      'Barbados':                 'Barbados',
+      'Dominica':                 'Dominica',
+      'Grenada':                  'Grenada',
+      'Saint Lucia':              'St. Lucia',
+      'Saint Kitts and Nevis':    'St. Kitts and Nevis',
+      'Saint Vincent and the Grenadines': 'St. Vincent and the Grenadines',
+      'Antigua and Barbuda':      'Antigua and Barbuda',
+      'Sao Tome and Principe':    'Sao Tome and Principe',
+      'Seychelles':               'Seychelles',
+    };
+
+    Promise.all([
+      d3.json('https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson'),
+      fetch('OHI_full.csv').then(r => r.text()).then(raw => {
+        const lines = raw.replace(/\r/g, '').split('\n');
+        const merged = [];
+        for (const line of lines) {
+          const t = line.trim();
+          if (!t) continue;
+          if (/^[A-Z]{2,3},/.test(t) || t.startsWith('REF_AREA')) merged.push(t);
+          else if (merged.length) merged[merged.length - 1] += ' ' + t;
+        }
+        return d3.csvParse(merged.join('\n'));
+      })
+    ]).then(([world, csv]) => {
+
+      const scoreMap = {};
+      csv.forEach(d => {
+        const label = (d.REF_AREA_LABEL || '').replace(/\s+/g, ' ').trim();
+        if (!label) return;
+        const base = parseFloat(d['2012']);
+        if (isNaN(base)) return;
+        scoreMap[label] = { base };
+        years.forEach(y => {
+          const v = parseFloat(d[String(y)]);
+          scoreMap[label][y] = isNaN(v) ? null : v;
+        });
+      });
+
+      let globalMax = 0;
+      Object.values(scoreMap).forEach(s => {
+        years.forEach(y => {
+          if (s[y] !== null) {
+            const diff = Math.abs(s[y] - s.base);
+            if (diff > globalMax) globalMax = diff;
+          }
+        });
+      });
+
+      const csvNames      = Object.keys(scoreMap);
+      const csvNormalized = csvNames.map(normalize);
+
+      function findCountry(geoName) {
+        const aliased = aliases[geoName];
+        if (aliased && scoreMap[aliased]) return aliased;
+        if (scoreMap[geoName]) return geoName;
+        const n = normalize(geoName);
+        let idx = csvNormalized.indexOf(n);
+        if (idx !== -1) return csvNames[idx];
+        idx = csvNormalized.findIndex(c => c.includes(n) || n.includes(c));
+        return idx !== -1 ? csvNames[idx] : null;
+      }
+
+
+
+      function getColor(geoName, year) {
+        const match = findCountry(geoName);
+        if (!match) return '#cccccc';
+        const v = scoreMap[match][year];
+        if (v === null || v === undefined) return '#aaaaaa';
+        return colorScale(v);
+      }
+
+      const countries = svg.selectAll('.country')
+        .data(world.features)
+        .enter()
+        .append('path')
+        .attr('class', 'country')
+        .attr('d', path)
+        .attr('fill', d => getColor(d.properties.name, selectedYear))
+        .on('mousemove', function(event, d) {
+          const match = findCountry(d.properties.name);
+          tooltip.style.opacity = 1;
+          tooltip.style.left = (event.clientX + 14) + 'px';
+          tooltip.style.top  = (event.clientY - 30) + 'px';
+          if (match && scoreMap[match][selectedYear] !== null) {
+            const val = scoreMap[match][selectedYear];
+            tooltip.innerHTML = `<strong>${d.properties.name}</strong>OHI ${selectedYear}: ${val.toFixed(1)}`;
+          } else {
+            tooltip.innerHTML = `<strong>${d.properties.name}</strong>Sin datos`;
+          }
+        })
+        .on('mouseleave', () => { tooltip.style.opacity = 0; })
+        .on('click', function(event, d) {
+          const match = findCountry(d.properties.name);
+
+          // Deseleccionar si ya estaba seleccionado
+          if (d3.select(this).classed('selected')) {
+            d3.selectAll('.country')
+              .classed('selected', false)
+              .attr('stroke', '#ffffff')
+              .attr('stroke-width', 0.4);
+            window.parent.postMessage({ type: 'resetGlobal' }, '*');
+            return;
+          }
+
+          // Deseleccionar cualquier otro país
+          d3.selectAll('.country')
+            .classed('selected', false)
+            .attr('stroke', '#ffffff')
+            .attr('stroke-width', 0.4);
+
+          // Resaltar el país clickeado
+          d3.select(this)
+            .classed('selected', true)
+            .attr('stroke', '#0d47a1')
+            .attr('stroke-width', 3)
+            .raise();
+
+          if (match) window.parent.postMessage({ type: 'countryClick', country: match }, '*');
+        });
+
+      yearSelect.addEventListener('change', () => {
+        selectedYear = +yearSelect.value;
+        countries.transition().duration(400)
+          .attr('fill', d => getColor(d.properties.name, selectedYear));
+      });
+
+      searchBox.addEventListener('input', () => {
+        const query = normalize(searchBox.value);
+
+        if (!query) {
+          // Restaurar todos los países a su color y opacidad normal
+          countries
+            .classed('searched', false)
+            .attr('stroke', '#ffffff')
+            .attr('stroke-width', 0.4)
+            .attr('fill', d => getColor(d.properties.name, selectedYear))
+            .attr('opacity', 1);
+          return;
+        }
+
+        // Identificar países que hacen match
+        countries.each(function(d) {
+          const n = normalize(d.properties.name);
+          const m = findCountry(d.properties.name);
+          const match = n.includes(query) || (m && normalize(m).includes(query));
+
+          d3.select(this)
+            .classed('searched', match)
+            .attr('stroke', match ? '#1a6fa8' : '#ffffff')
+            .attr('stroke-width', match ? 2.5 : 0.4)
+            .attr('fill', match ? getColor(d.properties.name, selectedYear) : '#e8e8e8')
+            .attr('opacity', match ? 1 : 0.4);
+
+          if (match) d3.select(this).raise();
+        });
+      });
+
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ocean Health Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #f4f6f8;
+      font-family: 'DM Mono', monospace;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #grid {
+      display: grid;
+      grid-template-columns: 1fr 3fr;
+      grid-template-rows: 1fr 2fr;
+      width: 100vw;
+      height: 100vh;
+      gap: 6px;
+      padding: 6px;
+    }
+
+    .panel {
+      background: #ffffff;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      position: relative;
+    }
+
+    .panel iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    .placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #aab4be;
+      gap: 10px;
+    }
+
+    .placeholder svg {
+      opacity: 0.35;
+    }
+
+    .placeholder span {
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <div id="grid">
+
+    <!-- Superior: graph5.html -->
+    <div class="panel" style="grid-column: 1 / -1;">
+      <iframe src="dualplot.html"></iframe>
+    </div>
+
+    <!-- Inferior izquierda: graph4.html -->
+    <div class="panel">
+      <iframe src="scatterPlot.html"></iframe>
+    </div>
+
+    <!-- Inferior derecha: graph2.html -->
+    <div class="panel">
+      <iframe src="mapa.html"></iframe>
+    </div>
+
+  </div>
+</body>
+<script>
+  window.addEventListener('message', e => {
+    if (e.data?.type === 'countryClick' || e.data?.type === 'resetGlobal') {
+      document.querySelectorAll('iframe').forEach(f => {
+        f.contentWindow.postMessage(e.data, '*');
+      });
+    }
+  });
+</script>
+</html>
