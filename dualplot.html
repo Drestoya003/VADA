@@ -236,8 +236,8 @@
             tooltip.style.left = (event.clientX+14)+'px';
             tooltip.style.top  = (event.clientY-30)+'px';
             tooltip.innerHTML = `<strong>${y}${isProj?' · Proyección':''}</strong>
-              <span class="ohi-val">OHI: ${o.value.toFixed(2)}${o.lo!==undefined?` [${o.lo.toFixed(2)}, ${o.hi.toFixed(2)}]`:''}</span><br>
-              ${t ? `<span class="temp-val">Temp: ${t.value.toFixed(3)} °C${t.lo!==undefined?` [${t.lo.toFixed(3)}, ${t.hi.toFixed(3)}]`:''}</span>` : ''}`;
+              <span class="ohi-val">OHI: ${o.value.toFixed(2)}${o && o.lo != null ?` [${o.lo.toFixed(2)}, ${o.hi.toFixed(2)}]`:''}</span><br>
+              ${t ? `<span class="temp-val">Temp: ${t.value.toFixed(3)} °C${t.lo != null ?` [${t.lo.toFixed(3)}, ${t.hi.toFixed(3)}]`:''}</span>` : ''}`;
           })
           .on('mouseleave', () => { tooltip.style.opacity = 0; });
 
